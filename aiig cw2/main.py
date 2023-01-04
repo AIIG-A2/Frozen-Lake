@@ -1,5 +1,6 @@
 import numpy as np
 import contextlib
+import random
 from itertools import product
 
 from task1 import Environment
@@ -180,6 +181,156 @@ def play(env):
         env.render()
         print('Reward: {0}.'.format(r))
 
+
+def policy_evaluation(env, policy, gamma, theta, max_iterations):
+    value = np.zeros(env.n_states, dtype=np.float)
+
+    for _ in range(max_iterations):
+        delta = 0
+        for s in range(env.n_states):
+            v = value[s]
+            value[s] = sum(
+                [env.p(next_s, s, policy[s]) * (env.r(next_s, s, policy[s]) + gamma * value[next_s]) for next_s in
+                 range(env.n_states)])
+
+            delta = max(delta, abs(v - value[s]))
+        if delta < theta:
+            break
+    return value
+
+
+def policy_improvement(env, value, gamma, policy):
+    policy_stable = True
+    for s in range(env.n_states):
+        pol = policy[s].copy()
+        v = [
+            sum([env.p(next_s, s, a) * (env.r(next_s, s, a) + gamma * value[next_s]) for next_s in range(env.n_states)])
+            for a in range(env.n_actions)]
+        policy[s] = np.argmax(v)
+        if pol != policy[s]:
+            policy_stable = False
+    return policy_stable
+
+
+def policy_iteration(env, gamma, theta, max_iterations, policy=None):
+    value = np.zeros(env.n_states, dtype=int)
+    if policy is None:
+        policy = np.zeros(env.n_states, dtype=int)
+    else:
+        policy = np.array(policy, dtype=int)
+    policy_stable = False
+    index = 0
+    while not policy_stable:
+        value = policy_evaluation(env, policy, gamma, theta, max_iterations)
+        policy_stable = policy_improvement(env, value, gamma, policy)
+        index += 1
+    print(index)
+    return policy, value
+
+
+def value_iteration(env, gamma, theta, max_iterations, value=None):
+    index = 0
+    if value is None:
+        value = np.zeros(env.n_states)
+    else:
+        value = np.array(value, dtype=np.float)
+    for _ in range(max_iterations):
+        delta = 0.
+        for s in range(env.n_states):
+            v = value[s]
+            value[s] = max([sum(
+                [env.p(next_s, s, a) * (env.r(next_s, s, a) + gamma * value[next_s]) for next_s in range(env.n_states)])
+                for a in range(env.n_actions)])
+
+            delta = max(delta, np.abs(v - value[s]))
+
+        if delta < theta:
+            break
+
+        index = index + 1
+
+    policy = np.zeros(env.n_states, dtype=int)
+    for s in range(env.n_states):
+        policy[s] = np.argmax([sum(
+            [env.p(next_s, s, a) * (env.r(next_s, s, a) + gamma * value[next_s]) for next_s in range(env.n_states)]) for
+            a in range(env.n_actions)])
+
+    print(index)
+    return policy, value
+
+def sarsa(env, max_episodes, eta, gamma, epsilon, seed=None, optimal_value=None, find_episodes=False):
+    random_state = np.random.RandomState(seed)
+    eta = np.linspace(eta, 0, max_episodes)
+    epsilon = np.linspace(epsilon, 0, max_episodes)
+    q = np.zeros((env.n_states, env.n_actions))
+
+    for i in range(max_episodes):
+        s = env.reset()
+        terminal = False
+        a = e_greedy(q[s], epsilon[i], env.n_actions, random_state)
+
+        # Select action a for state s according to an e-greedy policy based on Q. by random
+        while not terminal:
+            next_s, r, terminal = env.step(a)
+            next_a = e_greedy(q[next_s], epsilon[i], env.n_actions, random_state)
+            q[s][a] = q[s][a] + eta[i] * (r + (gamma * q[next_s][next_a]) - q[s][a])
+            s = next_s
+            a = next_a
+
+        if find_episodes:
+            value_new = policy_evaluation(env, q.argmax(axis=1), gamma, theta=0.001, max_iterations=100)
+            if all(abs(optimal_value[i] - value_new[i]) < 0.001 for i in range(len(value_new))):
+                print('Episodes to find the optimal policy: ' + str(i))
+                return q.argmax(axis=1), value_new
+
+    policy = q.argmax(axis=1)
+    value = q.max(axis=1)
+
+    return policy, value
+
+def e_greedy(q, epsilon, n_actions, random_state):
+    if random.uniform(0, 1) < epsilon:
+        a = random_state.choice(np.flatnonzero(q == q.max()))
+    else:
+        a = random_state.randint(n_actions)
+    return a
+
+
+
+def q_learning(env, max_episodes, eta, gamma, epsilon, seed=None, optimal_value=None, find_episodes=False):
+    random_state = np.random.RandomState(seed)
+    eta = np.linspace(eta, 0, max_episodes)
+    epsilon = np.linspace(epsilon, 0, max_episodes)
+    q = np.zeros((env.n_states, env.n_actions))
+    for i in range(max_episodes):
+        s = env.reset()
+        terminal = False
+        while not terminal:
+            a = e_greedy(q[s], epsilon[i], env.n_actions, random_state)
+            next_s, r, terminal = env.step(a)
+            next_a = np.argmax(q[next_s])
+            q[s][a] = q[s][a] + eta[i] * (r + (gamma * q[next_s][next_a]) - q[s][a])
+            s = next_s
+
+        if find_episodes:
+            value_new = policy_evaluation(env, q.argmax(axis=1), gamma, theta=0.001, max_iterations=100)
+            if all(abs(optimal_value[i]-value_new[i]) < 0.001 for i in range(len(value_new))):
+                print('Episodes to find the optimal policy: ' + str(i))
+                return q.argmax(axis=1), value_new
+
+    policy = q.argmax(axis=1)
+    value = q.max(axis=1)
+
+    return policy, value
+
+
+def e_greedy(q, epsilon, n_actions, random_state):
+    if random.uniform(0, 1) < epsilon:
+        a = random_state.choice(np.flatnonzero(q == q.max()))
+    else:
+        a = random_state.randint(n_actions)
+    return a
+
 def main():
     seed=0;
     # Small lake
@@ -187,8 +338,52 @@ def main():
             ['.', '#', '.', '#'],
             ['.', '.', '.', '#'],
             ['#', '.', '.', '$']]
-    env=FrozenLake(lake,slip=0.1,max_steps=16,seed=0)
+    env=FrozenLake(lake,slip=0.1,max_steps=16,seed=seed)
     play(env)
+    print('# Model-based algorithms')
+    gamma = 0.9
+    theta = 0.001
+    max_iterations = 100
+
+    print('')
+
+    print('## Policy iteration')
+    policy, value = policy_iteration(env, gamma, theta, max_iterations)
+    env.render(policy, value)
+
+    opt_value = value.copy()
+
+    print('')
+
+    print('## Value iteration')
+    policy, value = value_iteration(env, gamma, theta, max_iterations)
+    env.render(policy, value)
+
+    print('')
+
+    print('# Model-free algorithms')
+    max_episodes = 40000
+    eta = 0.1
+    epsilon = 0.9
+
+    print('')
+
+    print('## Sarsa')
+    policy, value = sarsa(env, max_episodes, eta, gamma, epsilon, seed=seed, optimal_value=opt_value,
+                          find_episodes=False)
+    env.render(policy, value)
+
+    print('')
+    print(opt_value)
+    print(policy_evaluation(env, policy, gamma, theta=0.001, max_iterations=100))
+
+    print('## Q-learning')
+    policy, value = q_learning(env, max_episodes, eta, gamma, epsilon, seed=seed, optimal_value=opt_value,
+                               find_episodes=False)
+    env.render(policy, value)
+
 
 if __name__ == "__main__":
     main()
+
+
