@@ -589,8 +589,8 @@ def main():
                 ['.', '.', '.', '#', '.', '.', '.', '$']]
 
     # env = FrozenLake(lake, slip=0.1, max_steps=16, seed=seed)
-    # env = Big_frozen_lake(big_lake, slip=0.1, max_steps=64, seed=seed)
-    # play(env)
+    env = Big_frozen_lake(big_lake, slip=0.1, max_steps=64, seed=seed)
+    play(env)
     print('# Model-based algorithms')
     gamma = 0.9
     theta = 0.001
