@@ -129,13 +129,11 @@ class FrozenLake(Environment):
     def p(self, next_state, state, action):
         return self._p[next_state, state, action]
 
-
     def r(self, next_state, state, action):
         if state == 15:
             return 1
         else:
             return 0
-
 
     def render(self, policy=None, value=None):
         if policy is None:
@@ -160,6 +158,7 @@ class FrozenLake(Environment):
             print('Value:')
             with _printoptions(precision=3, suppress=True):
                 print(value[:-1].reshape(self.lake.shape))
+
 
 class Big_frozen_lake(Environment):
     def __init__(self, lake, slip, max_steps, seed=None):
@@ -202,7 +201,8 @@ class Big_frozen_lake(Environment):
         for state_index, state in enumerate(self.itos):
             for action_index, action in enumerate(self.actions):
                 next_state = (state[0] + action[0], state[1] + action[1])
-                if (state_index == 19 or state_index == 29 or state_index == 35 or state_index == 41 or state_index == 42 or state_index == 46 or state_index == 49 or state_index == 52 or state_index == 54 or state_index == 59):
+                if (
+                        state_index == 19 or state_index == 29 or state_index == 35 or state_index == 41 or state_index == 42 or state_index == 46 or state_index == 49 or state_index == 52 or state_index == 54 or state_index == 59):
                     self._p[state_index, state_index, action_index] = 1.0
                 else:
                     next_state_index = self.stoi.get(next_state, state_index)
@@ -210,7 +210,7 @@ class Big_frozen_lake(Environment):
                     for act in self.actions:
                         next_state_action = (state[0] + act[0], state[1] + act[1])
                         next_state_index = self.stoi.get(next_state_action, state_index)
-                        self._p[next_state_index, state_index, action_index] += self.slip/4
+                        self._p[next_state_index, state_index, action_index] += self.slip / 4
 
     def step(self, action):
         state, reward, done = Environment.step(self, action)
@@ -352,47 +352,54 @@ def sarsa(env, max_episodes, eta, gamma, epsilon, seed=None, optimal_value=None,
     random_state = np.random.RandomState(seed)
     eta = np.linspace(eta, 0, max_episodes)
     epsilon = np.linspace(epsilon, 0, max_episodes)
-    q = np.zeros((env.n_states, env.n_actions))
+    q_values = np.zeros((env.n_states, env.n_actions))
     rewards = []
     # Loop through the maximum number of episodes
     for i in range(max_episodes):
-        s = env.reset()
+        state = env.reset()
         # Set the terminal flag to False
         terminal = False
         # Select an action using an e-greedy policy based on Q and the current epsilon value
-        a = e_greedy(q[s], epsilon[i], env.n_actions, random_state)
+        action = e_greedy(q_values[state], epsilon[i], env.n_actions, random_state)
 
         # Select action a for state s according to an e-greedy policy based on Q. by random
         while not terminal:
-            # Take action a and get the next state, reward, and terminal flag
-            next_s, r, terminal = env.step(a)
+            # Take action and get the next state, reward, and terminal flag
+            next_state, reward, terminal = env.step(action)
             # Select the next action using an e-greedy policy based on the Q-values for the next state
-            next_a = e_greedy(q[next_s], epsilon[i], env.n_actions, random_state)
+            next_action = e_greedy(q_values[next_state], epsilon[i], env.n_actions, random_state)
             # Update the Q-value for state s and action a
-            q[s][a] = q[s][a] + eta[i] * (r + (gamma * q[next_s][next_a]) - q[s][a])
-            s = next_s
-            a = next_a
+            q_values[state][action] = q_values[state][action] + eta[i] * (
+                    reward + (gamma * q_values[next_state][next_action]) - q_values[state][action])
+            state = next_state
+            action = next_action
 
         # If find_episodes is True, check if the optimal policy has been found
         if find_episodes:
-            print('yeah')
             # Evaluate the current policy using policy evaluation
-            value_new = policy_evaluation(env, q.argmax(axis=1), gamma, theta=0.001, max_iterations=128)
+            value_new = policy_evaluation(env, q_values.argmax(axis=1), gamma, theta=0.001, max_iterations=128)
             # Check if the optimal policy has been found by comparing the values to the optimal value
             if all(abs(optimal_value[i] - value_new[i]) < 0.001 for i in range(len(value_new))):
                 print('Episodes to find the optimal policy: {}' + format(i))
-                return q.argmax(axis=1), value_new
+                return q_values.argmax(axis=1), value_new
 
-        rewards.append(sum(q.max(axis=1)))
-    # If the optimal policy was not found, return the policy and value function for the final iteration
-    policy = q.argmax(axis=1)
-    value = q.max(axis=1)
+        # Append the sum of max q_values to the rewards array
+        rewards.append(sum(q_values.max(axis=1)))
+
+    # Compute the moving average of the rewards using np.convolve
     moving_average = np.convolve(rewards, np.ones(20) / 20, mode='valid')
+
+    # Create a plot showing the episode number on the x-axis and the moving average on the y-axis
     plt.plot(moving_average)
     plt.xlabel('Episode Number')
     plt.ylabel('Moving Average of Returns')
     plt.title('Performance of Sarsa Algorithm')
     plt.show()
+
+    # If the optimal policy was not found, return the policy and value function for the final iteration
+    policy = q_values.argmax(axis=1)
+    value = q_values.max(axis=1)
+
     return policy, value
 
 
@@ -400,37 +407,46 @@ def q_learning(env, max_episodes, eta, gamma, epsilon, seed=None, optimal_value=
     random_state = np.random.RandomState(seed)
     eta = np.linspace(eta, 0, max_episodes)
     epsilon = np.linspace(epsilon, 0, max_episodes)
-    q = np.zeros((env.n_states, env.n_actions))
+    q_values = np.zeros((env.n_states, env.n_actions))
     rewards = []
+
     for i in range(max_episodes):
-        s = env.reset()
+        # Reset the environment and get the initial state
+        state = env.reset()
+        # Set the terminal flag to False
         terminal = False
         while not terminal:
-            a = e_greedy(q[s], epsilon[i], env.n_actions, random_state)
-            next_s, r, terminal = env.step(a)
-            next_a = np.argmax(q[next_s])
-            q[s][a] = q[s][a] + eta[i] * (r + (gamma * q[next_s][next_a]) - q[s][a])
-            s = next_s
+            action = e_greedy(q_values[state], epsilon[i], env.n_actions, random_state)
+            next_state, reward, terminal = env.step(action)
+            next_action = np.argmax(q_values[next_state])
+            q_values[state][action] = q_values[state][action] + eta[i] * (
+                    reward + (gamma * q_values[next_state][next_action]) - q_values[state][action])
+            state = next_state
 
         if find_episodes:
-            value_new = policy_evaluation(env, q.argmax(axis=1), gamma, theta=0.001, max_iterations=128)
+            value_new = policy_evaluation(env, q_values.argmax(axis=1), gamma, theta=0.001, max_iterations=128)
             if all(abs(optimal_value[i] - value_new[i]) < 0.001 for i in range(len(value_new))):
                 print('Episodes to find the optimal policy: ' + format(i))
-                return q.argmax(axis=1), value_new
+                return q_values.argmax(axis=1), value_new
 
-        rewards.append(sum(q.max(axis=1)))
-    policy = q.argmax(axis=1)
-    value = q.max(axis=1)
+        # Append the sum of max q_values to the rewards array
+        rewards.append(sum(q_values.max(axis=1)))
+
+    # Compute the moving average of the rewards using np.convolve
     moving_average = np.convolve(rewards, np.ones(20) / 20, mode='valid')
+
+    # Create a plot showing the episode number on the x-axis and the moving average on the y-axis
     plt.plot(moving_average)
     plt.xlabel('Episode Number')
     plt.ylabel('Moving Average of Returns')
     plt.title('Performance of Q-learning Algorithm')
     plt.show()
+
+    policy = q_values.argmax(axis=1)
+    value = q_values.max(axis=1)
+
     return policy, value
 
-
-################ Non-tabular model-free algorithms ################
 
 class LinearWrapper:
     def __init__(self, env):
@@ -464,12 +480,12 @@ class LinearWrapper:
             # Encode the current state
             features = self.encode_state(s)
             # Calculate the Q-values for the current state using the current theta
-            q = features.dot(theta)
+            q_values = features.dot(theta)
 
             # Set the policy for the current state to the action with the highest Q-value
-            policy[s] = np.argmax(q)
+            policy[s] = np.argmax(q_values)
             # Set the value for the current state to the highest Q-value
-            value[s] = np.max(q)
+            value[s] = np.max(q_values)
 
         return policy, value
 
@@ -487,46 +503,48 @@ class LinearWrapper:
 
 def linear_sarsa(env, max_episodes, eta, gamma, epsilon, seed=None):
     random_state = np.random.RandomState(seed)
-
     eta = np.linspace(eta, 0, max_episodes)
     epsilon = np.linspace(epsilon, 0, max_episodes)
-
     theta = np.zeros(env.n_features)
-    rewards=[]
+    rewards = []
     for i in range(max_episodes):
-
+        # Reset the environment and get the initial features
         features = env.reset()
-        q = features.dot(theta)
+        # Calculate the Q-values for the initial features using the current theta
+        q_values = features.dot(theta)
         # Select an action using an e-greedy policy based on the Q-values and the current epsilon value
-        a = e_greedy(q, epsilon[i], env.n_actions, random_state)
+        action = e_greedy(q_values, epsilon[i], env.n_actions, random_state)
         # Set the terminal flag to False
         terminal = False
         while not terminal:
-            # Take action a and get the next state, reward, and terminal flag
-            next_s, r, terminal = env.step(a)
+            # Take action and get the next state, reward, and terminal flag
+            next_state, reward, terminal = env.step(action)
             # Calculate the temporal difference error
-            delta = r - q[a]
+            delta = reward - q_values[action]
             # Calculate the Q-values for the next state using the current theta
-            q = next_s.dot(theta)
+            q_values = next_state.dot(theta)
             # Select the next action using an e-greedy policy based on the Q-values for the next state
-            a_new = e_greedy(q, epsilon[i], env.n_actions, random_state)
+            action_new = e_greedy(q_values, epsilon[i], env.n_actions, random_state)
 
             # Update the temporal difference error
-            delta = delta + (gamma * max(q))
+            delta = delta + (gamma * max(q_values))
             # Update theta using the temporal difference error
-            theta = theta + eta[i] * delta * features[a]
+            theta = theta + eta[i] * delta * features[action]
             # Set the current features to the next state
-            features = next_s
+            features = next_state
             # Set the current action to the next action
-            a = a_new
+            action = action_new
 
         rewards.append(sum(theta))
+
     moving_average = np.convolve(rewards, np.ones(20) / 20, mode='valid')
+
     plt.plot(moving_average)
     plt.xlabel('Episode Number')
     plt.ylabel('Moving Average of Returns')
     plt.title('Performance of Linear Sarsa Algorithm')
     plt.show()
+
     return theta
 
 
@@ -537,22 +555,26 @@ def linear_q_learning(env, max_episodes, eta, gamma, epsilon, seed=None):
     epsilon = np.linspace(epsilon, 0, max_episodes)
 
     theta = np.zeros(env.n_features)
-    rewards=[]
+    rewards = []  # Initialize an array to store the rewards for each episode
     for i in range(max_episodes):
         features = env.reset()
-        q = features.dot(theta)
+        q_values = features.dot(theta)
         terminal = False
 
         while not terminal:
-            a = e_greedy(q, epsilon[i], env.n_actions, random_state)
-            next_s, r, terminal = env.step(a)
-            delta = r - q[a]
-            q = next_s.dot(theta)
-            delta = delta + (gamma * max(q))
-            theta = theta + (eta[i] * delta * features[a])
-            features = next_s
+            action = e_greedy(q_values, epsilon[i], env.n_actions, random_state)
+            next_state, reward, terminal = env.step(action)
+            delta = reward - q_values[action]
+            q_values = next_state.dot(theta)
+            delta = delta + (gamma * max(q_values))
+            theta = theta + (eta[i] * delta * features[action])
+            features = next_state
+
+        # Append the sum of theta to the rewards array
         rewards.append(sum(theta))
+
     moving_average = np.convolve(rewards, np.ones(20) / 20, mode='valid')
+
     plt.plot(moving_average)
     plt.xlabel('Episode Number')
     plt.ylabel('Moving Average of Returns')
@@ -570,7 +592,7 @@ def e_greedy(q, epsilon, n_actions, random_state):
 
 
 def main():
-    seed = 0;
+    seed = 0
 
     # Small lake
     lake = [['&', '.', '.', '.'],
@@ -588,9 +610,10 @@ def main():
                 ['.', '#', '.', '.', '#', '.', '#', '.'],
                 ['.', '.', '.', '#', '.', '.', '.', '$']]
 
-    # env = FrozenLake(lake, slip=0.1, max_steps=16, seed=seed)
-    env = Big_frozen_lake(big_lake, slip=0.1, max_steps=64, seed=seed)
-    play(env)
+    # Small lake
+    env = FrozenLake(lake, slip=0.1, max_steps=16, seed=seed)
+    # Big lake
+    # env = Big_frozen_lake(big_lake, slip=0.1, max_steps=64, seed=seed)
     print('# Model-based algorithms')
     gamma = 0.9
     theta = 0.001
