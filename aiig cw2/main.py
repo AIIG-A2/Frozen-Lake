@@ -2,8 +2,8 @@ import numpy as np
 import contextlib
 import random
 from itertools import product
-
-from task1 import Environment
+import matplotlib.pyplot as plt
+from environment import Environment
 
 
 # Configures numpy print options
@@ -129,7 +129,6 @@ class FrozenLake(Environment):
     def p(self, next_state, state, action):
         return self._p[next_state, state, action]
 
-    # TODO:
 
     def r(self, next_state, state, action):
         if state == 15:
@@ -137,7 +136,6 @@ class FrozenLake(Environment):
         else:
             return 0
 
-    # TODO:
 
     def render(self, policy=None, value=None):
         if policy is None:
@@ -264,7 +262,7 @@ def sarsa(env, max_episodes, eta, gamma, epsilon, seed=None, optimal_value=None,
     eta = np.linspace(eta, 0, max_episodes)
     epsilon = np.linspace(epsilon, 0, max_episodes)
     q = np.zeros((env.n_states, env.n_actions))
-
+    rewards = []
     # Loop through the maximum number of episodes
     for i in range(max_episodes):
         s = env.reset()
@@ -286,6 +284,7 @@ def sarsa(env, max_episodes, eta, gamma, epsilon, seed=None, optimal_value=None,
 
         # If find_episodes is True, check if the optimal policy has been found
         if find_episodes:
+            print('yeah')
             # Evaluate the current policy using policy evaluation
             value_new = policy_evaluation(env, q.argmax(axis=1), gamma, theta=0.001, max_iterations=128)
             # Check if the optimal policy has been found by comparing the values to the optimal value
@@ -293,10 +292,16 @@ def sarsa(env, max_episodes, eta, gamma, epsilon, seed=None, optimal_value=None,
                 print('Episodes to find the optimal policy: {}' + format(i))
                 return q.argmax(axis=1), value_new
 
+        rewards.append(sum(q.max(axis=1)))
     # If the optimal policy was not found, return the policy and value function for the final iteration
     policy = q.argmax(axis=1)
     value = q.max(axis=1)
-
+    moving_average = np.convolve(rewards, np.ones(20) / 20, mode='valid')
+    plt.plot(moving_average)
+    plt.xlabel('Episode Number')
+    plt.ylabel('Moving Average of Returns')
+    plt.title('Performance of Sarsa Algorithm')
+    plt.show()
     return policy, value
 
 
@@ -305,6 +310,7 @@ def q_learning(env, max_episodes, eta, gamma, epsilon, seed=None, optimal_value=
     eta = np.linspace(eta, 0, max_episodes)
     epsilon = np.linspace(epsilon, 0, max_episodes)
     q = np.zeros((env.n_states, env.n_actions))
+    rewards = []
     for i in range(max_episodes):
         s = env.reset()
         terminal = False
@@ -321,9 +327,15 @@ def q_learning(env, max_episodes, eta, gamma, epsilon, seed=None, optimal_value=
                 print('Episodes to find the optimal policy: ' + format(i))
                 return q.argmax(axis=1), value_new
 
+        rewards.append(sum(q.max(axis=1)))
     policy = q.argmax(axis=1)
     value = q.max(axis=1)
-
+    moving_average = np.convolve(rewards, np.ones(20) / 20, mode='valid')
+    plt.plot(moving_average)
+    plt.xlabel('Episode Number')
+    plt.ylabel('Moving Average of Returns')
+    plt.title('Performance of Q-learning Algorithm')
+    plt.show()
     return policy, value
 
 
@@ -389,7 +401,7 @@ def linear_sarsa(env, max_episodes, eta, gamma, epsilon, seed=None):
     epsilon = np.linspace(epsilon, 0, max_episodes)
 
     theta = np.zeros(env.n_features)
-
+    rewards=[]
     for i in range(max_episodes):
 
         features = env.reset()
@@ -417,6 +429,13 @@ def linear_sarsa(env, max_episodes, eta, gamma, epsilon, seed=None):
             # Set the current action to the next action
             a = a_new
 
+        rewards.append(sum(theta))
+    moving_average = np.convolve(rewards, np.ones(20) / 20, mode='valid')
+    plt.plot(moving_average)
+    plt.xlabel('Episode Number')
+    plt.ylabel('Moving Average of Returns')
+    plt.title('Performance of Linear Sarsa Algorithm')
+    plt.show()
     return theta
 
 
@@ -427,7 +446,7 @@ def linear_q_learning(env, max_episodes, eta, gamma, epsilon, seed=None):
     epsilon = np.linspace(epsilon, 0, max_episodes)
 
     theta = np.zeros(env.n_features)
-
+    rewards=[]
     for i in range(max_episodes):
         features = env.reset()
         q = features.dot(theta)
@@ -441,6 +460,13 @@ def linear_q_learning(env, max_episodes, eta, gamma, epsilon, seed=None):
             delta = delta + (gamma * max(q))
             theta = theta + (eta[i] * delta * features[a])
             features = next_s
+        rewards.append(sum(theta))
+    moving_average = np.convolve(rewards, np.ones(20) / 20, mode='valid')
+    plt.plot(moving_average)
+    plt.xlabel('Episode Number')
+    plt.ylabel('Moving Average of Returns')
+    plt.title('Performance of Linear Q-learning Algorithm')
+    plt.show()
     return theta
 
 
@@ -483,7 +509,7 @@ def main():
     print('')
 
     print('# Model-free algorithms')
-    max_episodes = 20000
+    max_episodes = 10000
     eta = 0.5
     epsilon = 0.5
 
